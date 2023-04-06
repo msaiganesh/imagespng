@@ -1,3 +1,57 @@
+import java.util.ArrayList;
+import java.util.List;
+
+import javax.sql.DataSource;
+
+import org.springframework.batch.item.ItemReader;
+import org.springframework.batch.item.database.JdbcPagingItemReader;
+import org.springframework.batch.item.database.PagingQueryProvider;
+import org.springframework.batch.item.database.support.SqlPagingQueryProviderFactoryBean;
+import org.springframework.jdbc.core.BeanPropertyRowMapper;
+import org.springframework.stereotype.Component;
+
+@Component
+public class MyItemReader implements ItemReader<List<MyItem>> {
+
+    private static final int CHUNK_SIZE = 10;
+
+    private final DataSource dataSource;
+
+    public MyItemReader(DataSource dataSource) {
+        this.dataSource = dataSource;
+    }
+
+    @Override
+    public List<MyItem> read() throws Exception {
+        JdbcPagingItemReader<MyItem> reader = new JdbcPagingItemReader<>();
+        reader.setDataSource(dataSource);
+        reader.setFetchSize(CHUNK_SIZE);
+        reader.setRowMapper(new BeanPropertyRowMapper<>(MyItem.class));
+        reader.setPageSize(Integer.MAX_VALUE); // set the page size to a very large number
+        reader.setQueryProvider(queryProvider().getObject());
+        reader.afterPropertiesSet();
+        reader.setSaveState(false);
+        reader.open(null);
+        List<MyItem> myItems = new ArrayList<>();
+        MyItem myItem;
+        while ((myItem = reader.read()) != null) {
+            myItems.add(myItem);
+        }
+        reader.close();
+        return myItems;
+    }
+
+    private PagingQueryProvider queryProvider() throws Exception {
+        SqlPagingQueryProviderFactoryBean queryProviderFactoryBean = new SqlPagingQueryProviderFactoryBean();
+        queryProviderFactoryBean.setDataSource(dataSource);
+        queryProviderFactoryBean.setSelectClause("SELECT *");
+        queryProviderFactoryBean.setFromClause("FROM my_table");
+        queryProviderFactoryBean.setSortKey("id");
+        return queryProviderFactoryBean.getObject();
+    }
+}
+
+
 @Bean
 public SqlPagingQueryProviderFactoryBean createQueryProvider() {
     SqlPagingQueryProviderFactoryBean queryProvider = new SqlPagingQueryProviderFactoryBean();
