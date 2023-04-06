@@ -1,3 +1,13 @@
+@Bean
+public SqlPagingQueryProviderFactoryBean createQueryProvider() {
+    SqlPagingQueryProviderFactoryBean queryProvider = new SqlPagingQueryProviderFactoryBean();
+    queryProvider.setSelectClause("SELECT id");
+    queryProvider.setFromClause("FROM records");
+    queryProvider.setWhereClause("WHERE processed = false");
+    queryProvider.setSortKeys(Collections.singletonMap("id", Order.ASCENDING));
+    return queryProvider;
+}
+
 public class RecordByIdItemReader implements ItemReader<Record> {
 
     private final JdbcTemplate jdbcTemplate;
