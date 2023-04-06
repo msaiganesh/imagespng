@@ -1,0 +1,76 @@
+public class RecordByIdItemReader implements ItemReader<Record> {
+
+    private final JdbcTemplate jdbcTemplate;
+    private final List<Long> ids;
+    private int currentIdIndex;
+
+    public RecordByIdItemReader(JdbcTemplate jdbcTemplate, List<Long> ids) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.ids = ids;
+        this.currentIdIndex = 0;
+    }
+
+    @Override
+    public Record read() throws Exception {
+        if (currentIdIndex >= ids.size()) {
+            return null;
+        }
+        Long id = ids.get(currentIdIndex++);
+        return jdbcTemplate.queryForObject("SELECT * FROM records WHERE id = ?", new RecordRowMapper(), id);
+    }
+}
+
+public class IdRecordProcessor implements ItemProcessor<Long, List<Record>> {
+
+    private final JdbcTemplate jdbcTemplate;
+
+    public IdRecordProcessor(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    @Override
+    public List<Record> process(Long id) throws Exception {
+        List<Record> records = jdbcTemplate.query("SELECT * FROM records WHERE id = ?", new RecordRowMapper(), id);
+        // process records as needed
+        return records;
+    }
+}
+
+@Bean
+public ItemReader<Long> idReader() {
+    JdbcPagingItemReader<Long> reader = new JdbcPagingItemReader<>();
+    reader.setDataSource(dataSource);
+    reader.setPageSize(1000);
+    reader.setRowMapper(new SingleColumnRowMapper<>(Long.class));
+    reader.setQueryProvider(createQueryProvider());
+    return reader;
+}
+
+@Bean
+public ItemReader<Record> recordByIdReader(JdbcTemplate jdbcTemplate, List<Long> ids) {
+    return new RecordByIdItemReader(jdbcTemplate, ids);
+}
+
+@Bean
+public ItemProcessor<Long, List<Record>> idRecordProcessor(JdbcTemplate jdbcTemplate) {
+    return new IdRecordProcessor(jdbcTemplate);
+}
+
+@Bean
+public Step processRecords() {
+    return stepBuilderFactory.get("processRecords")
+            .<Long, List<Record>>chunk(1)
+            .reader(idReader())
+            .processor(idRecordProcessor(jdbcTemplate))
+            .reader(recordByIdReader(jdbcTemplate, ids))
+            .writer(recordWriter())
+            .build();
+}
+
+@Bean
+public Job job() {
+    return jobBuilderFactory.get("job")
+            .incrementer(new RunIdIncrementer())
+            .start(processRecords())
+            .build();
+}
